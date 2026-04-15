@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Decido — Câmara de Decisão</title>
+<meta name="description" content="Pare de girar em círculos. Sua câmara de decisão pessoal com IA.">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#07070e; --s1:#0d0d1c; --s2:#131325; --s3:#1a1a30;
+  --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.1);
+  --gold:#c8a458; --gold2:#e2c07a; --gold3:rgba(200,164,88,0.12);
+  --text:#ede9f8; --muted:#5a5670; --muted2:#8a86a0;
+  --accent:#6c5fd4; --green:#3db87a; --red:#d45c72;
+}
+html,body { height:100%; font-family:'Outfit',sans-serif; background:var(--bg); color:var(--text); overflow:hidden; }
+.bg-layer { position:fixed; inset:0; pointer-events:none; z-index:0;
+  background: radial-gradient(ellipse 70% 50% at 15% 5%, rgba(108,95,212,0.07) 0%, transparent 65%),
+              radial-gradient(ellipse 50% 40% at 85% 90%, rgba(200,164,88,0.06) 0%, transparent 60%); }
+.app { position:relative; z-index:1; height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.phone { width:390px; height:844px; background:var(--s1); border-radius:50px; border:1.5px solid rgba(255,255,255,0.1); overflow:hidden; position:relative;
+  box-shadow:0 80px 160px rgba(0,0,0,0.9),inset 0 1px 0 rgba(255,255,255,0.07); display:flex; flex-direction:column; }
+.notch { position:absolute; top:0; left:50%; transform:translateX(-50%); width:126px; height:34px; background:var(--bg); border-radius:0 0 22px 22px; z-index:50; }
+.screen { position:absolute; inset:0; padding:50px 26px 28px; display:flex; flex-direction:column;
+  opacity:0; pointer-events:none; transition:opacity 0.35s ease,transform 0.35s ease; transform:translateY(12px);
+  overflow-y:auto; overflow-x:hidden; scrollbar-width:none; }
+.screen::-webkit-scrollbar { display:none; }
+.screen.active { opacity:1; pointer-events:all; transform:translateY(0); }
+.display { font-family:'Cormorant Garamond',serif; font-size:38px; font-weight:300; line-height:1.15; }
+.display em { font-style:italic; color:var(--gold2); }
+h2 { font-family:'Cormorant Garamond',serif; font-size:24px; font-weight:400; line-height:1.3; }
+h2 em { font-style:italic; color:var(--gold2); }
+.label { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); }
+.gold-label { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--gold); }
+p { font-size:14px; line-height:1.65; color:var(--muted2); }
+.btn { width:100%; padding:15px 20px; border-radius:14px; border:none; font-family:'Outfit',sans-serif; font-size:14px; font-weight:500; cursor:pointer; transition:all 0.22s; }
+.btn-gold { background:linear-gradient(135deg,var(--gold) 0%,var(--gold2) 100%); color:#080810; }
+.btn-gold:hover:not(:disabled) { opacity:0.88; transform:translateY(-1px); }
+.btn-gold:disabled { opacity:0.4; cursor:not-allowed; }
+.btn-outline { background:transparent; color:var(--muted2); border:1px solid var(--border2); }
+.btn-outline:hover { border-color:var(--gold); color:var(--gold); }
+.btn-ghost { background:transparent; color:var(--muted); font-size:13px; padding:12px; }
+.card { background:var(--s2); border:1px solid var(--border); border-radius:18px; padding:20px; }
+.card-gold { background:linear-gradient(135deg,rgba(200,164,88,0.07),rgba(200,164,88,0.03)); border:1px solid rgba(200,164,88,0.18); border-radius:18px; padding:20px; }
+.nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+.back-btn { width:36px; height:36px; border-radius:50%; background:var(--s2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:15px; transition:all 0.2s; color:var(--muted2); }
+.back-btn:hover { background:var(--s3); color:var(--text); }
+.loading-dots { display:flex; gap:6px; align-items:center; justify-content:center; }
+.loading-dots span { width:6px; height:6px; border-radius:50%; background:var(--gold); animation:ldot 1.2s infinite; }
+.loading-dots span:nth-child(2) { animation-delay:0.2s; }
+.loading-dots span:nth-child(3) { animation-delay:0.4s; }
+@keyframes ldot { 0%,80%,100%{opacity:0.2;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }
+.progress-row { display:flex; gap:6px; margin-bottom:28px; }
+.prog-seg { flex:1; height:2px; background:var(--s3); border-radius:2px; overflow:hidden; }
+.prog-seg-fill { height:100%; background:var(--gold); border-radius:2px; width:0%; transition:width 0.4s ease; }
+.impact-row { display:flex; align-items:center; gap:12px; padding:14px 16px; background:var(--s2); border:1px solid var(--border); border-radius:13px; margin-bottom:8px; }
+.impact-emoji { font-size:20px; width:28px; text-align:center; flex-shrink:0; }
+.impact-info { flex:1; min-width:0; }
+.impact-dim { font-size:11px; color:var(--muted); margin-bottom:3px; }
+.impact-label { font-size:13px; font-weight:500; }
+.impact-bar-wrap { width:56px; height:3px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; flex-shrink:0; }
+.impact-bar { height:100%; border-radius:3px; }
+.confidence-ring { position:relative; width:110px; height:110px; margin:0 auto 20px; }
+.confidence-ring svg { transform:rotate(-90deg); }
+.ring-bg { fill:none; stroke:var(--s3); stroke-width:6; }
+.ring-fill { fill:none; stroke:var(--gold); stroke-width:6; stroke-linecap:round; stroke-dasharray:283; stroke-dashoffset:283; transition:stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1); }
+.ring-text { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.ring-pct { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:600; color:var(--gold2); line-height:1; }
+.ring-sub { font-size:9px; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; }
+textarea { width:100%; background:var(--s2); border:1px solid var(--border); border-radius:16px; padding:18px; color:var(--text); font-family:'Outfit',sans-serif; font-size:14px; line-height:1.65; resize:none; outline:none; transition:border-color 0.2s; min-height:130px; }
+textarea:focus { border-color:rgba(200,164,88,0.35); }
+textarea::placeholder { color:var(--muted); }
+.opt-btn { width:100%; padding:14px 16px; background:var(--s2); border:1px solid var(--border); border-radius:13px; color:var(--text); font-family:'Outfit',sans-serif; font-size:13.5px; text-align:left; cursor:pointer; transition:all 0.2s; margin-bottom:9px; display:block; }
+.opt-btn:hover { border-color:rgba(200,164,88,0.35); color:var(--gold2); background:var(--gold3); }
+.opt-btn.selected { border-color:var(--gold); color:var(--gold2); background:var(--gold3); }
+.divider { height:1px; background:var(--border); margin:16px 0; }
+.scen-tabs { display:flex; gap:8px; margin-bottom:16px; }
+.scen-tab { flex:1; padding:10px; border-radius:11px; border:1px solid var(--border); background:var(--s2); font-size:12px; font-family:'Outfit',sans-serif; font-weight:500; color:var(--muted); cursor:pointer; text-align:center; transition:all 0.2s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.scen-tab.active { border-color:var(--gold); color:var(--gold); background:var(--gold3); }
+.tag { display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:500; letter-spacing:0.05em; }
+.tag-purple { background:rgba(108,95,212,0.12); color:#a598f0; }
+.tag-gold { background:rgba(200,164,88,0.12); color:var(--gold2); }
+.tag-green { background:rgba(61,184,122,0.12); color:var(--green); }
+.anchor-card { background:linear-gradient(135deg,rgba(108,95,212,0.08),rgba(200,164,88,0.05)); border:1px solid rgba(108,95,212,0.15); border-radius:16px; padding:18px; margin-bottom:12px; }
+.fab { position:sticky; bottom:0; padding-top:14px; background:linear-gradient(to top,var(--s1) 75%,transparent); margin-top:auto; }
+.error-box { background:rgba(212,92,114,0.08); border:1px solid rgba(212,92,114,0.2); border-radius:12px; padding:14px 16px; font-size:13px; color:var(--red); margin-bottom:14px; display:none; }
+.chips { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:20px; }
+.chip { padding:6px 12px; background:var(--s2); border:1px solid var(--border); border-radius:20px; font-size:12px; color:var(--muted2); cursor:pointer; transition:all 0.2s; font-family:'Outfit',sans-serif; }
+.chip:hover { border-color:var(--gold); color:var(--gold); }
+/* AUTH */
+.auth-input { width:100%; background:var(--s2); border:1px solid var(--border); border-radius:14px; padding:15px 18px; color:var(--text); font-family:'Outfit',sans-serif; font-size:14px; outline:none; transition:border-color 0.2s; margin-bottom:12px; }
+.auth-input:focus { border-color:rgba(200,164,88,0.35); }
+.auth-input::placeholder { color:var(--muted); }
+/* SPLASH */
+#s-splash { align-items:center; justify-content:center; text-align:center; }
+.splash-glyph { width:90px; height:90px; border-radius:26px; background:linear-gradient(135deg,var(--s2),var(--s3)); border:1px solid rgba(200,164,88,0.2); display:flex; align-items:center; justify-content:center; font-size:42px; margin:0 auto 28px; box-shadow:0 0 60px rgba(200,164,88,0.12),0 20px 40px rgba(0,0,0,0.4); }
+/* HOME */
+.home-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+.avatar { width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--gold)); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; color:white; }
+.insight-pill { background:linear-gradient(135deg,rgba(108,95,212,0.1),rgba(200,164,88,0.07)); border:1px solid rgba(108,95,212,0.18); border-radius:14px; padding:14px 16px; margin-bottom:22px; }
+.dec-item { background:var(--s2); border:1px solid var(--border); border-radius:14px; padding:15px; margin-bottom:9px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:12px; }
+.dec-item:hover { border-color:rgba(200,164,88,0.25); }
+.dec-item-info { flex:1; }
+.dec-item-text { font-size:13.5px; font-weight:500; margin-bottom:5px; }
+/* LOADING */
+#s-loading,#s-processing { align-items:center; justify-content:center; text-align:center; }
+.loading-icon { font-size:48px; margin-bottom:28px; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:0.6;transform:scale(0.96)} 50%{opacity:1;transform:scale(1.04)} }
+.loading-step { font-size:13px; color:var(--muted2); margin-top:14px; min-height:20px; transition:all 0.3s; }
+</style>
+</head>
+<body>
+<div class="bg-layer"></div>
+<div class="app">
+<div class="phone">
+  <div class="notch"></div>
+
+  <!-- SPLASH -->
+
+  <div class="screen active" id="s-splash">
+    <div class="splash-glyph">⚖️</div>
+    <div class="display">Decido<em>.</em></div>
+    <p style="margin-top:10px;margin-bottom:44px;max-width:220px;margin-left:auto;margin-right:auto;">Pare de girar em círculos.<br>Sua câmara de decisão pessoal.</p>
+    <button class="btn btn-gold" style="width:200px;margin:0 auto 10px;" onclick="go('s-login')">Entrar</button>
+    <button class="btn btn-ghost" onclick="go('s-signup')">Criar conta grátis</button>
+  </div>
+
+  <!-- LOGIN -->
+
+  <div class="screen" id="s-login">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-splash')">←</div>
+      <div class="label">Entrar</div>
+      <div style="width:36px;"></div>
+    </div>
+    <h2 style="margin-bottom:6px;">Bem-vindo<br><em>de volta</em></h2>
+    <p style="margin-bottom:28px;">Continue de onde parou.</p>
+    <div class="error-box" id="err-login"></div>
+    <input class="auth-input" type="email" id="login-email" placeholder="seu@email.com">
+    <input class="auth-input" type="password" id="login-pass" placeholder="Senha">
+    <button class="btn btn-gold" onclick="doLogin()" style="margin-bottom:12px;">Entrar</button>
+    <button class="btn btn-ghost" onclick="go('s-signup')">Não tem conta? Criar grátis</button>
+  </div>
+
+  <!-- SIGNUP -->
+
+  <div class="screen" id="s-signup">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-splash')">←</div>
+      <div class="label">Criar conta</div>
+      <div style="width:36px;"></div>
+    </div>
+    <h2 style="margin-bottom:6px;">Comece<br><em>gratuitamente</em></h2>
+    <p style="margin-bottom:28px;">5 decisões por mês no plano free.</p>
+    <div class="error-box" id="err-signup"></div>
+    <input class="auth-input" type="email" id="signup-email" placeholder="seu@email.com">
+    <input class="auth-input" type="password" id="signup-pass" placeholder="Criar senha (mín. 6 caracteres)">
+    <button class="btn btn-gold" onclick="doSignup()" style="margin-bottom:12px;">Criar conta grátis</button>
+    <button class="btn btn-ghost" onclick="go('s-login')">Já tem conta? Entrar</button>
+  </div>
+
+  <!-- HOME -->
+
+  <div class="screen" id="s-home">
+    <div class="home-top">
+      <div>
+        <div class="label" style="margin-bottom:2px;">Bem-vindo de volta</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:22px;" id="home-name">—</div>
+      </div>
+      <div class="avatar" id="home-avatar">?</div>
+    </div>
+    <div class="insight-pill">
+      <div class="gold-label" style="margin-bottom:5px;">✦ Insight</div>
+      <div style="font-size:13px;line-height:1.55;">Decisões não tomadas custam mais energia do que as tomadas. Cada dilema resolvido libera espaço mental.</div>
+    </div>
+    <div class="label" style="margin-bottom:12px;">Suas decisões</div>
+    <div id="decisions-list">
+      <div style="text-align:center;padding:30px 0;color:var(--muted);font-size:13px;">Nenhuma decisão ainda.<br>Comece agora! 👇</div>
+    </div>
+    <div class="fab">
+      <button class="btn btn-gold" onclick="go('s-new')">+ Nova Decisão</button>
+    </div>
+  </div>
+
+  <!-- NEW DECISION -->
+
+  <div class="screen" id="s-new">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-home')">←</div>
+      <div class="label">Nova Decisão</div>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="gold-label" style="margin-bottom:10px;">✦ O que está travando você?</div>
+    <h2 style="margin-bottom:18px;">Escreva <em>livremente</em>.<br>Sem estrutura.</h2>
+    <div class="error-box" id="err-new"></div>
+    <textarea id="txt-decision" rows="5" placeholder="Ex: Recebi uma proposta de emprego melhor, mas teria que mudar de cidade e deixar minha equipe..."></textarea>
+    <div style="font-size:11px;color:var(--muted);margin:8px 0 16px;text-align:right;" id="char-count">0 / 600</div>
+    <div class="label" style="margin-bottom:10px;">Exemplos</div>
+    <div class="chips">
+      <div class="chip" onclick="fillEx('Recebi uma proposta de emprego melhor pagando 40% a mais, mas teria que mudar de cidade. Não sei se vale deixar minha equipe e minha rotina.')">Trocar de emprego</div>
+      <div class="chip" onclick="fillEx('Estou num relacionamento de 3 anos que é estável mas sem muita conexão. Me pergunto se devo continuar ou terminar.')">Relacionamento</div>
+      <div class="chip" onclick="fillEx('Tenho R$50k guardados e estou entre investir no meu próprio negócio ou deixar aplicado em renda fixa. Tenho medo de perder tudo.')">Investir ou guardar</div>
+    </div>
+    <div class="fab">
+      <button class="btn btn-gold" onclick="enterChamber()">⚖️ Entrar na Câmara</button>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+
+  <div class="screen" id="s-loading">
+    <div class="loading-icon">🔮</div>
+    <h2 style="margin-bottom:8px;">Analisando<br><em>seu dilema</em></h2>
+    <p>A IA está processando cada camada da sua decisão.</p>
+    <div class="loading-dots" style="margin-top:24px;"><span></span><span></span><span></span></div>
+    <div class="loading-step" id="loading-step">Identificando categoria e vieses...</div>
+  </div>
+
+  <!-- QUESTIONS -->
+
+  <div class="screen" id="s-questions">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-new')">←</div>
+      <div class="label">Câmara de Decisão</div>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="progress-row">
+      <div class="prog-seg"><div class="prog-seg-fill" id="prog-1"></div></div>
+      <div class="prog-seg"><div class="prog-seg-fill" id="prog-2"></div></div>
+      <div class="prog-seg"><div class="prog-seg-fill" id="prog-3"></div></div>
+    </div>
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:32px;margin-bottom:8px;">🔮</div>
+      <div id="q-cat-tag"></div>
+    </div>
+    <div id="qblock-0">
+      <div class="gold-label" style="margin-bottom:12px;">Pergunta 1 de 3</div>
+      <div class="card-gold" style="margin-bottom:16px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:19px;line-height:1.35;margin-bottom:6px;" id="q-text-0">—</div>
+        <div style="font-size:12px;color:var(--muted2);" id="q-hint-0">—</div>
+      </div>
+      <div id="q-opts-0"></div>
+    </div>
+    <div id="qblock-1" style="display:none;">
+      <div class="gold-label" style="margin-bottom:12px;">Pergunta 2 de 3</div>
+      <div class="card-gold" style="margin-bottom:16px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:19px;line-height:1.35;margin-bottom:6px;" id="q-text-1">—</div>
+        <div style="font-size:12px;color:var(--muted2);" id="q-hint-1">—</div>
+      </div>
+      <div id="q-opts-1"></div>
+    </div>
+    <div id="qblock-2" style="display:none;">
+      <div class="gold-label" style="margin-bottom:12px;">Pergunta 3 de 3</div>
+      <div class="card-gold" style="margin-bottom:16px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:19px;line-height:1.35;margin-bottom:6px;" id="q-text-2">—</div>
+        <div style="font-size:12px;color:var(--muted2);" id="q-hint-2">—</div>
+      </div>
+      <div id="q-opts-2"></div>
+    </div>
+  </div>
+
+  <!-- PROCESSING -->
+
+  <div class="screen" id="s-processing">
+    <div class="loading-icon">⚖️</div>
+    <h2 style="margin-bottom:8px;">Calculando<br><em>impactos</em></h2>
+    <p>Gerando mapa e veredito com base nas suas respostas.</p>
+    <div class="loading-dots" style="margin-top:24px;"><span></span><span></span><span></span></div>
+    <div class="loading-step" id="proc-step">Mapeando cenários...</div>
+  </div>
+
+  <!-- IMPACT MAP -->
+
+  <div class="screen" id="s-impact">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-questions')">←</div>
+      <div class="label">Mapa de Impacto</div>
+      <div style="width:36px;"></div>
+    </div>
+    <h2 style="margin-bottom:6px;">O que muda<br>em cada <em>cenário</em>?</h2>
+    <p style="margin-bottom:18px;">Projeção baseada nas suas respostas.</p>
+    <div class="scen-tabs">
+      <div class="scen-tab active" id="tab-a" onclick="switchScen('a')">Opção A</div>
+      <div class="scen-tab" id="tab-b" onclick="switchScen('b')">Opção B</div>
+    </div>
+    <div id="impact-a"></div>
+    <div id="impact-b" style="display:none;"></div>
+    <div class="fab">
+      <button class="btn btn-gold" onclick="go('s-verdict')">Ver Veredito →</button>
+    </div>
+  </div>
+
+  <!-- VERDICT -->
+
+  <div class="screen" id="s-verdict">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-impact')">←</div>
+      <div class="label">Veredito</div>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="confidence-ring">
+      <svg width="110" height="110" viewBox="0 0 110 110">
+        <circle class="ring-bg" cx="55" cy="55" r="45"/>
+        <circle class="ring-fill" id="ring-fill" cx="55" cy="55" r="45"/>
+      </svg>
+      <div class="ring-text">
+        <div class="ring-pct" id="v-pct">—%</div>
+        <div class="ring-sub">confiança</div>
+      </div>
+    </div>
+    <div class="card-gold" style="margin-bottom:12px;text-align:center;">
+      <div class="gold-label" style="margin-bottom:8px;">✦ Recomendação</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:20px;line-height:1.35;" id="v-rec">—</div>
+    </div>
+    <div class="anchor-card">
+      <div class="label" style="color:#a598f0;margin-bottom:8px;">Âncora psicológica</div>
+      <div style="font-size:13px;line-height:1.6;color:var(--muted2);font-style:italic;" id="v-anchor">—</div>
+    </div>
+    <div class="card" style="margin-bottom:12px;margin-top:12px;">
+      <div class="label" style="margin-bottom:8px;">⚠ Viés identificado</div>
+      <div style="font-size:13px;color:var(--muted2);" id="v-bias">—</div>
+    </div>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="label" style="margin-bottom:8px;">→ Próxima ação</div>
+      <div style="font-size:13px;font-weight:500;" id="v-action">—</div>
+    </div>
+    <button class="btn btn-gold" style="margin-bottom:10px;" onclick="saveAndHome()">✓ Decidi</button>
+    <button class="btn btn-outline" onclick="go('s-home')">Preciso de mais tempo</button>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────
+const SUPABASE_URL = 'SUPABASE_URL_AQUI';
+const SUPABASE_KEY = 'SUPABASE_ANON_KEY_AQUI';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const state = { user:null, decision:'', classification:null, questions:[], answers:[], impactMap:null, verdict:null };
+
+// ── NAV ─────────────────────────────────────────────
+function go(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const t = document.getElementById(id);
+  t.classList.add('active');
+  t.scrollTop = 0;
+  if (id === 's-verdict' && state.verdict) animateRing();
+}
+
+// ── AUTH ─────────────────────────────────────────────
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    state.user = session.user;
+    updateHomeUser();
+    await loadDecisions();
+    go('s-home');
+  }
+});
+
+async function doSignup() {
+  const email = document.getElementById('signup-email').value.trim();
+  const pass = document.getElementById('signup-pass').value;
+  const err = document.getElementById('err-signup');
+  err.style.display = 'none';
+  if (!email || !pass) { err.textContent = 'Preencha email e senha.'; err.style.display = 'block'; return; }
+  const { error } = await sb.auth.signUp({ email, password: pass });
+  if (error) { err.textContent = error.message; err.style.display = 'block'; return; }
+  err.style.display = 'none';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const err = document.getElementById('err-login');
+  err.style.display = 'none';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) { err.textContent = 'Email ou senha incorretos.'; err.style.display = 'block'; }
+}
+
+function updateHomeUser() {
+  if (!state.user) return;
+  const email = state.user.email || '';
+  const initial = email[0]?.toUpperCase() || '?';
+  document.getElementById('home-name').textContent = email.split('@')[0];
+  document.getElementById('home-avatar').textContent = initial;
+}
+
+async function loadDecisions() {
+  const { data } = await sb.from('decisions').select('*').order('criado_em', { ascending: false }).limit(10);
+  const list = document.getElementById('decisions-list');
+  if (!data || data.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--muted);font-size:13px;">Nenhuma decisão ainda.<br>Comece agora! 👇</div>';
+    return;
+  }
+  const catEmojis = { carreira:'💼', finanças:'💰', relacionamentos:'❤️', estilo_de_vida:'🌱', saúde:'🏥', família:'🏠' };
+  list.innerHTML = data.map(d => `
+    <div class="dec-item">
+      <div style="font-size:22px;">${catEmojis[d.categoria]||'📋'}</div>
+      <div class="dec-item-info">
+        <div class="dec-item-text">${d.texto.substring(0,60)}${d.texto.length>60?'...':''}</div>
+        <div style="font-size:11px;color:var(--muted);">${new Date(d.criado_em).toLocaleDateString('pt-BR')}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── HELPERS ──────────────────────────────────────────
+function fillEx(txt) { document.getElementById('txt-decision').value = txt; updateCharCount(); }
+function updateCharCount() {
+  const v = document.getElementById('txt-decision').value.length;
+  document.getElementById('char-count').textContent = v + ' / 600';
+}
+document.getElementById('txt-decision').addEventListener('input', updateCharCount);
+
+function setStep(id, txt) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.opacity = 0;
+  setTimeout(() => { el.textContent = txt; el.style.opacity = 1; }, 200);
+}
+
+async function callAI(systemPrompt, userMessage) {
+  const res = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ system: systemPrompt, user: userMessage })
+  });
+  if (!res.ok) throw new Error('Erro na API');
+  const data = await res.json();
+  return data.result;
+}
+
+// ── CHAMBER ──────────────────────────────────────────
+async function enterChamber() {
+  const txt = document.getElementById('txt-decision').value.trim();
+  if (txt.length < 20) {
+    const err = document.getElementById('err-new');
+    err.textContent = 'Escreva pelo menos uma frase descrevendo seu dilema.';
+    err.style.display = 'block'; return;
+  }
+  document.getElementById('err-new').style.display = 'none';
+  state.decision = txt; state.answers = [];
+  go('s-loading');
+  try {
+    setStep('loading-step', 'Identificando categoria e vieses...');
+    const classification = await callAI(
+      `Você é um psicólogo cognitivo. Analise o dilema e retorne APENAS JSON válido sem markdown:\n{"categoria":"carreira"|"finanças"|"relacionamentos"|"estilo_de_vida"|"saúde"|"família","subcategoria":string,"urgencia":"baixa"|"média"|"alta"|"crítica","dilema_resumido":string,"opcao_a":string,"opcao_b":string,"vieses_provaveis":[string]}`,
+      `Analise: "${txt}"`
+    );
+    state.classification = classification;
+    setStep('loading-step', 'Gerando perguntas cirúrgicas...');
+    const qData = await callAI(
+      `Você é psicoterapeuta especialista em decisões. Gere 3 perguntas cirúrgicas. Retorne APENAS JSON válido sem markdown:\n{"perguntas":[{"id":1,"texto":string,"dica":string,"opcoes":[string,string,string]},{"id":2,"texto":string,"dica":string,"opcoes":[string,string,string]},{"id":3,"texto":string,"dica":string,"opcoes":[string,string,string]}]}\nRegras: P1=instinto, P2=medo via projeção futura, P3=bloqueio central. Perguntas curtas (<18 palavras).`,
+      `Dilema: "${txt}"\nCategoria: ${classification.categoria}\nOpção A: ${classification.opcao_a}\nOpção B: ${classification.opcao_b}`
+    );
+    state.questions = qData.perguntas;
+    renderQuestions();
+    go('s-questions');
+  } catch(e) {
+    go('s-new');
+    const err = document.getElementById('err-new');
+    err.textContent = 'Erro ao conectar com a IA. Tente novamente.';
+    err.style.display = 'block';
+  }
+}
+
+// ── QUESTIONS ────────────────────────────────────────
+function renderQuestions() {
+  const catEmojis = { carreira:'💼', finanças:'💰', relacionamentos:'❤️', estilo_de_vida:'🌱', saúde:'🏥', família:'🏠' };
+  const c = state.classification;
+  document.getElementById('q-cat-tag').innerHTML = `<span class="tag tag-purple">${catEmojis[c.categoria]||'📋'} ${c.categoria}</span>`;
+  ['prog-1','prog-2','prog-3'].forEach(id => document.getElementById(id).style.width='0%');
+  state.questions.forEach((q,i) => {
+    document.getElementById(`q-text-${i}`).textContent = q.texto;
+    document.getElementById(`q-hint-${i}`).textContent = q.dica;
+    const optsEl = document.getElementById(`q-opts-${i}`);
+    optsEl.innerHTML = '';
+    q.opcoes.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'opt-btn'; btn.textContent = opt;
+      btn.onclick = () => handleAnswer(i, opt, btn);
+      optsEl.appendChild(btn);
+    });
+  });
+  showQBlock(0);
+}
+
+let currentQ = 0;
+function showQBlock(idx) {
+  for (let i=0;i<3;i++) document.getElementById(`qblock-${i}`).style.display = i===idx?'block':'none';
+  currentQ = idx;
+  for (let i=0;i<3;i++) document.getElementById(`prog-${i+1}`).style.width = i<idx?'100%':(i===idx?'50%':'0%');
+}
+
+function handleAnswer(qIdx, answer, btn) {
+  btn.parentElement.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  state.answers[qIdx] = answer;
+  setTimeout(() => {
+    if (qIdx < 2) {
+      document.getElementById(`prog-${qIdx+1}`).style.width='100%';
+      showQBlock(qIdx+1);
+    } else {
+      document.getElementById('prog-3').style.width='100%';
+      generateImpactAndVerdict();
+    }
+    btn.classList.remove('selected');
+  }, 320);
+}
+
+// ── IMPACT + VERDICT ─────────────────────────────────
+async function generateImpactAndVerdict() {
+  go('s-processing');
+  try {
+    const { decision, classification, answers } = state;
+    const answersText = answers.map((a,i)=>`Q${i+1}: "${a}"`).join('\n');
+    setStep('proc-step','Mapeando cenários...');
+    const impactMap = await callAI(
+      `Analista de decisões. Projete impactos. Retorne APENAS JSON válido sem markdown:\n{"opcao_a":{"nome":string,"impactos":[{"dimensao":string,"emoji":string,"score":number,"rotulo":string,"descricao":string}]},"opcao_b":{"nome":string,"impactos":[...]}}. Score -100 a +100.`,
+      `Dilema:"${decision}"\nA:${classification.opcao_a}\nB:${classification.opcao_b}\nRespostas:\n${answersText}`
+    );
+    state.impactMap = impactMap;
+    setStep('proc-step','Gerando veredito...');
+    const verdict = await callAI(
+      `Conselheiro sábio e direto. Fale como mentor — nunca como coach genérico. Tome posição clara. Retorne APENAS JSON válido sem markdown:\n{"recomendacao":string,"opcao_recomendada":"opcao_a"|"opcao_b"|"negociar_antes"|"aguardar","confianca_pct":number,"ancora_psicologica":string,"alerta_vies":string,"proxima_acao":string,"quando_revisar":string}`,
+      `Dilema:"${decision}"\nA:${classification.opcao_a}\nB:${classification.opcao_b}\nRespostas:\n${answersText}\nImpactos A:${JSON.stringify(impactMap.opcao_a.impactos)}\nImpactos B:${JSON.stringify(impactMap.opcao_b.impactos)}\nVieses:${classification.vieses_provaveis.join(', ')}`
+    );
+    state.verdict = verdict;
+    renderImpact(); renderVerdict();
+    go('s-impact');
+  } catch(e) {
+    go('s-questions');
+    alert('Erro ao gerar análise. Tente novamente.');
+  }
+}
+
+function renderImpact() {
+  const { impactMap, classification } = state;
+  document.getElementById('tab-a').textContent = classification.opcao_a.substring(0,20);
+  document.getElementById('tab-b').textContent = classification.opcao_b.substring(0,20);
+  renderImpactRows('impact-a', impactMap.opcao_a.impactos);
+  renderImpactRows('impact-b', impactMap.opcao_b.impactos);
+}
+
+function renderImpactRows(elId, impactos) {
+  const el = document.getElementById(elId);
+  el.innerHTML = '';
+  (impactos||[]).forEach(imp => {
+    const score = imp.score||0;
+    const barColor = score>20?'var(--green)':score<-20?'var(--red)':'var(--gold)';
+    const labelColor = score>20?'var(--green)':score<-20?'var(--red)':'var(--gold2)';
+    el.innerHTML += `<div class="impact-row"><div class="impact-emoji">${imp.emoji||'●'}</div><div class="impact-info"><div class="impact-dim">${imp.dimensao}</div><div class="impact-label" style="color:${labelColor}">${imp.rotulo}</div></div><div class="impact-bar-wrap"><div class="impact-bar" style="width:${Math.abs(score)}%;background:${barColor};"></div></div></div>`;
+  });
+}
+
+function switchScen(s) {
+  document.getElementById('tab-a').className = 'scen-tab'+(s==='a'?' active':'');
+  document.getElementById('tab-b').className = 'scen-tab'+(s==='b'?' active':'');
+  document.getElementById('impact-a').style.display = s==='a'?'block':'none';
+  document.getElementById('impact-b').style.display = s==='b'?'block':'none';
+}
+
+function renderVerdict() {
+  const v = state.verdict;
+  document.getElementById('v-pct').textContent = (v.confianca_pct||0)+'%';
+  document.getElementById('v-rec').textContent = v.recomendacao||'—';
+  document.getElementById('v-anchor').textContent = v.ancora_psicologica||'—';
+  document.getElementById('v-bias').textContent = v.alerta_vies||'—';
+  document.getElementById('v-action').textContent = v.proxima_acao||'—';
+}
+
+function animateRing() {
+  const pct = state.verdict?.confianca_pct||0;
+  const offset = 283 - (pct/100)*283;
+  setTimeout(() => { document.getElementById('ring-fill').style.strokeDashoffset = offset; }, 200);
+}
+
+async function saveAndHome() {
+  if (state.user && state.verdict) {
+    await sb.from('decisions').insert({
+      user_id: state.user.id,
+      texto: state.decision,
+      categoria: state.classification?.categoria,
+      opcao_a: state.classification?.opcao_a,
+      opcao_b: state.classification?.opcao_b,
+      respostas: state.answers,
+      impacto: state.impactMap,
+      veredito: state.verdict
+    });
+    await loadDecisions();
+  }
+  go('s-home');
+}
+</script>
+
+</body>
+</html>
