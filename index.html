@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Decido — Câmara de Decisão</title>
+<meta name="description" content="Pare de girar em círculos. Sua câmara de decisão pessoal com IA.">
+<meta name="theme-color" content="#07070e">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ── RESET & BASE ───────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html { height:100%; overflow:hidden; }
+body {
+  height:100%; overflow:hidden;
+  font-family:'Outfit',sans-serif;
+  background:#07070e; color:#ede9f8;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── TOKENS ─────────────────────────────────── */
+:root {
+–bg:#07070e; –s1:#0d0d1c; –s2:#131325; –s3:#1a1a30;
+–border:rgba(255,255,255,0.07);
+–gold:#c8a458; –gold2:#e2c07a; –gold3:rgba(200,164,88,0.1);
+–text:#ede9f8; –muted:#5a5670; –muted2:#8a86a0;
+–accent:#6c5fd4; –green:#3db87a; –red:#d45c72;
+–radius:16px; –radius-sm:12px;
+}
+
+/* ── LAYOUT ─────────────────────────────────── */
+#app {
+width:100vw; height:100vh;
+display:flex; align-items:center; justify-content:center;
+background: radial-gradient(ellipse 80% 50% at 20% 10%, rgba(108,95,212,0.08) 0%, transparent 60%),
+radial-gradient(ellipse 60% 40% at 80% 85%, rgba(200,164,88,0.06) 0%, transparent 60%);
+}
+
+#phone {
+width:min(390px, 100vw);
+height:min(844px, 100vh);
+background:var(–s1);
+border-radius:min(44px, 0px);
+border:1px solid rgba(255,255,255,0.08);
+overflow:hidden; position:relative;
+box-shadow:0 60px 120px rgba(0,0,0,0.8);
+}
+
+@media (max-width:390px) {
+#phone { border-radius:0; border:none; }
+}
+
+/* ── SCREENS ────────────────────────────────── */
+.screen {
+position:absolute; inset:0;
+padding:52px 24px 32px;
+display:flex; flex-direction:column;
+opacity:0; pointer-events:none;
+transition:opacity 0.3s ease;
+overflow:hidden; /* NO scroll — conteúdo deve caber na tela */
+}
+.screen.active { opacity:1; pointer-events:all; }
+.screen-center { align-items:center; justify-content:center; text-align:center; }
+
+/* ── TYPOGRAPHY ─────────────────────────────── */
+.serif { font-family:‘Cormorant Garamond’,serif; }
+.display { font-family:‘Cormorant Garamond’,serif; font-size:36px; font-weight:400; line-height:1.15; }
+.display em { font-style:italic; color:var(–gold2); }
+h2 { font-family:‘Cormorant Garamond’,serif; font-size:22px; font-weight:400; line-height:1.3; }
+h2 em { font-style:italic; color:var(–gold2); }
+.label { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(–muted); }
+.gold-label { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(–gold); }
+p { font-size:13px; line-height:1.6; color:var(–muted2); }
+
+/* ── COMPONENTS ─────────────────────────────── */
+
+/* Buttons */
+.btn {
+width:100%; padding:15px 20px; border-radius:var(–radius);
+border:none; font-family:‘Outfit’,sans-serif; font-size:14px;
+font-weight:500; cursor:pointer; transition:all 0.2s;
+letter-spacing:0.01em; outline:none;
+}
+.btn:active { transform:scale(0.98); }
+.btn-gold { background:linear-gradient(135deg,var(–gold),var(–gold2)); color:#08080f; }
+.btn-gold:active { opacity:0.85; }
+.btn-outline { background:transparent; color:var(–muted2); border:1px solid rgba(255,255,255,0.1); }
+.btn-outline:active { border-color:var(–gold); color:var(–gold); }
+.btn-ghost { background:transparent; color:var(–muted); font-size:13px; padding:12px; }
+.btn[disabled] { opacity:0.4; cursor:not-allowed; }
+
+/* Inputs */
+.input {
+width:100%; background:var(–s2); border:1px solid var(–border);
+border-radius:var(–radius-sm); padding:14px 16px;
+color:var(–text); font-family:‘Outfit’,sans-serif;
+font-size:14px; outline:none; transition:border-color 0.2s;
+margin-bottom:10px;
+}
+.input:focus { border-color:rgba(200,164,88,0.4); }
+.input::placeholder { color:var(–muted); }
+
+textarea.input { resize:none; min-height:100px; line-height:1.6; }
+
+/* Error */
+.error {
+background:rgba(212,92,114,0.08); border:1px solid rgba(212,92,114,0.2);
+border-radius:var(–radius-sm); padding:12px 14px;
+font-size:13px; color:var(–red); margin-bottom:12px;
+display:none;
+}
+
+/* Cards */
+.card { background:var(–s2); border:1px solid var(–border); border-radius:var(–radius); padding:18px; }
+.card-gold {
+background:linear-gradient(135deg,rgba(200,164,88,0.08),rgba(200,164,88,0.03));
+border:1px solid rgba(200,164,88,0.18); border-radius:var(–radius); padding:18px;
+}
+.card-accent {
+background:linear-gradient(135deg,rgba(108,95,212,0.1),rgba(200,164,88,0.05));
+border:1px solid rgba(108,95,212,0.18); border-radius:var(–radius); padding:16px;
+}
+
+/* Nav */
+.nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-shrink:0; }
+.back-btn {
+width:36px; height:36px; border-radius:50%; background:var(–s2);
+border:1px solid var(–border); display:flex; align-items:center;
+justify-content:center; cursor:pointer; font-size:16px;
+color:var(–muted2); transition:all 0.2s;
+}
+.back-btn:active { background:var(–s3); }
+
+/* Tag */
+.tag { display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:500; }
+.tag-purple { background:rgba(108,95,212,0.15); color:#a598f0; }
+.tag-gold { background:rgba(200,164,88,0.15); color:var(–gold2); }
+.tag-green { background:rgba(61,184,122,0.15); color:var(–green); }
+
+/* Chips */
+.chips { display:flex; flex-wrap:wrap; gap:7px; }
+.chip {
+padding:6px 11px; background:var(–s2); border:1px solid var(–border);
+border-radius:20px; font-size:11px; color:var(–muted2);
+cursor:pointer; transition:all 0.2s; font-family:‘Outfit’,sans-serif;
+}
+.chip:active { border-color:var(–gold); color:var(–gold); }
+
+/* Option buttons */
+.opt-btn {
+width:100%; padding:13px 16px; background:var(–s2);
+border:1px solid var(–border); border-radius:var(–radius-sm);
+color:var(–text); font-family:‘Outfit’,sans-serif;
+font-size:13px; text-align:left; cursor:pointer;
+transition:all 0.2s; margin-bottom:8px; display:block;
+}
+.opt-btn:active, .opt-btn.selected { border-color:var(–gold); color:var(–gold2); background:var(–gold3); }
+
+/* Progress */
+.prog-row { display:flex; gap:5px; margin-bottom:20px; flex-shrink:0; }
+.prog-seg { flex:1; height:2px; background:var(–s3); border-radius:2px; overflow:hidden; }
+.prog-fill { height:100%; background:var(–gold); border-radius:2px; width:0; transition:width 0.4s ease; }
+
+/* Scenario tabs */
+.scen-tabs { display:flex; gap:8px; margin-bottom:14px; flex-shrink:0; }
+.scen-tab {
+flex:1; padding:9px; border-radius:var(–radius-sm);
+border:1px solid var(–border); background:var(–s2);
+font-size:12px; font-family:‘Outfit’,sans-serif;
+font-weight:500; color:var(–muted); cursor:pointer;
+text-align:center; transition:all 0.2s;
+white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.scen-tab.active { border-color:var(–gold); color:var(–gold); background:var(–gold3); }
+
+/* Impact rows */
+.impact-row {
+display:flex; align-items:center; gap:12px;
+padding:12px 14px; background:var(–s2);
+border:1px solid var(–border); border-radius:var(–radius-sm);
+margin-bottom:7px;
+}
+.impact-emoji { font-size:18px; width:26px; text-align:center; flex-shrink:0; }
+.impact-info { flex:1; min-width:0; }
+.impact-dim { font-size:10px; color:var(–muted); margin-bottom:2px; }
+.impact-val { font-size:13px; font-weight:500; }
+.impact-bar-wrap { width:50px; height:3px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; flex-shrink:0; }
+.impact-bar { height:100%; border-radius:3px; }
+
+/* Confidence ring */
+.ring-wrap { position:relative; width:100px; height:100px; margin:0 auto 16px; flex-shrink:0; }
+.ring-wrap svg { transform:rotate(-90deg); }
+.ring-bg { fill:none; stroke:var(–s3); stroke-width:6; }
+.ring-fill { fill:none; stroke:var(–gold); stroke-width:6; stroke-linecap:round; stroke-dasharray:283; stroke-dashoffset:283; transition:stroke-dashoffset 1.2s ease; }
+.ring-text { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.ring-pct { font-family:‘Cormorant Garamond’,serif; font-size:24px; font-weight:600; color:var(–gold2); line-height:1; }
+.ring-sub { font-size:9px; color:var(–muted); letter-spacing:0.1em; text-transform:uppercase; }
+
+/* Loading */
+.loading-dots { display:flex; gap:6px; align-items:center; justify-content:center; margin-top:20px; }
+.loading-dots span { width:6px; height:6px; border-radius:50%; background:var(–gold); animation:ldot 1.2s infinite; }
+.loading-dots span:nth-child(2) { animation-delay:.2s; }
+.loading-dots span:nth-child(3) { animation-delay:.4s; }
+@keyframes ldot { 0%,80%,100%{opacity:.2;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }
+.loading-step { font-size:12px; color:var(–muted2); margin-top:12px; min-height:18px; transition:opacity 0.3s; }
+.pulse { animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:.6;transform:scale(.96)} 50%{opacity:1;transform:scale(1.04)} }
+
+/* Spacer */
+.spacer { flex:1; }
+.gap-8 { height:8px; flex-shrink:0; }
+.gap-12 { height:12px; flex-shrink:0; }
+
+/* ── SCREEN: SPLASH ──────────────────────────── */
+.splash-icon {
+width:80px; height:80px; border-radius:22px;
+background:linear-gradient(135deg,var(–s2),var(–s3));
+border:1px solid rgba(200,164,88,0.2);
+display:flex; align-items:center; justify-content:center;
+font-size:38px; margin:0 auto 24px;
+box-shadow:0 0 50px rgba(200,164,88,0.1);
+}
+
+/* ── SCREEN: HOME ────────────────────────────── */
+.home-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-shrink:0; }
+.avatar {
+width:38px; height:38px; border-radius:50%;
+background:linear-gradient(135deg,var(–accent),var(–gold));
+display:flex; align-items:center; justify-content:center;
+font-size:15px; font-weight:600; color:#fff;
+}
+.dec-item {
+background:var(–s2); border:1px solid var(–border);
+border-radius:var(–radius-sm); padding:13px;
+margin-bottom:8px; cursor:pointer;
+display:flex; align-items:center; gap:10px;
+}
+.dec-item-text { font-size:13px; font-weight:500; margin-bottom:4px; }
+</style>
+
+</head>
+<body>
+<div id="app">
+<div id="phone">
+
+  <!-- ═══ SPLASH ═══ -->
+
+  <div class="screen screen-center active" id="s-splash">
+    <div class="splash-icon">⚖️</div>
+    <div class="display" style="margin-bottom:10px;">Decido<em>.</em></div>
+    <p style="margin-bottom:40px;max-width:200px;">Pare de girar em círculos.<br>Sua câmara de decisão pessoal.</p>
+    <button class="btn btn-gold" style="width:180px;margin-bottom:10px;" onclick="go('s-login')">Entrar</button>
+    <button class="btn btn-ghost" onclick="go('s-signup')">Criar conta grátis</button>
+  </div>
+
+  <!-- ═══ LOGIN ═══ -->
+
+  <div class="screen" id="s-login">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-splash')">←</div>
+      <div class="label">Entrar</div>
+      <div style="width:36px;"></div>
+    </div>
+    <h2 style="margin-bottom:6px;">Bem-vindo<br><em>de volta</em></h2>
+    <p style="margin-bottom:24px;">Continue de onde parou.</p>
+    <div class="error" id="err-login"></div>
+    <input class="input" type="email" id="login-email" placeholder="seu@email.com" autocomplete="email">
+    <input class="input" type="password" id="login-pass" placeholder="Senha" autocomplete="current-password">
+    <div class="spacer"></div>
+    <button class="btn btn-gold" id="btn-login" onclick="doLogin()" style="margin-bottom:10px;">Entrar</button>
+    <button class="btn btn-ghost" onclick="go('s-signup')">Não tem conta? Criar grátis</button>
+  </div>
+
+  <!-- ═══ SIGNUP ═══ -->
+
+  <div class="screen" id="s-signup">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-splash')">←</div>
+      <div class="label">Criar conta</div>
+      <div style="width:36px;"></div>
+    </div>
+    <h2 style="margin-bottom:6px;">Comece<br><em>gratuitamente</em></h2>
+    <p style="margin-bottom:24px;">5 decisões por mês no plano free.</p>
+    <div class="error" id="err-signup"></div>
+    <input class="input" type="email" id="signup-email" placeholder="seu@email.com" autocomplete="email">
+    <input class="input" type="password" id="signup-pass" placeholder="Senha (mín. 6 caracteres)" autocomplete="new-password">
+    <div class="spacer"></div>
+    <button class="btn btn-gold" id="btn-signup" onclick="doSignup()" style="margin-bottom:10px;">Criar conta grátis</button>
+    <button class="btn btn-ghost" onclick="go('s-login')">Já tem conta? Entrar</button>
+  </div>
+
+  <!-- ═══ HOME ═══ -->
+
+  <div class="screen" id="s-home">
+    <div class="home-top">
+      <div>
+        <div class="label" style="margin-bottom:2px;">Bem-vindo</div>
+        <div class="serif" style="font-size:20px;" id="home-name">—</div>
+      </div>
+      <div class="avatar" id="home-avatar">?</div>
+    </div>
+    <div class="card-accent" style="margin-bottom:18px;flex-shrink:0;">
+      <div class="gold-label" style="margin-bottom:5px;">✦ Insight</div>
+      <div style="font-size:13px;line-height:1.55;">Decisões adiadas custam mais energia do que as tomadas. Cada dilema resolvido libera espaço mental.</div>
+    </div>
+    <div class="label" style="margin-bottom:10px;flex-shrink:0;">Suas decisões</div>
+    <div id="decisions-list" style="flex:1;overflow-y:auto;">
+      <div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px;">Nenhuma decisão ainda.</div>
+    </div>
+    <button class="btn btn-gold" style="margin-top:16px;flex-shrink:0;" onclick="go('s-new')">+ Nova Decisão</button>
+  </div>
+
+  <!-- ═══ NEW DECISION ═══ -->
+
+  <div class="screen" id="s-new">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-home')">←</div>
+      <div class="label">Nova Decisão</div>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="gold-label" style="margin-bottom:8px;flex-shrink:0;">✦ O que está travando você?</div>
+    <h2 style="margin-bottom:16px;flex-shrink:0;">Escreva <em>livremente</em>.</h2>
+    <div class="error" id="err-new"></div>
+    <textarea class="input" id="txt-decision" placeholder="Ex: Recebi uma proposta de emprego melhor, mas teria que mudar de cidade..."></textarea>
+    <div style="font-size:11px;color:var(--muted);margin:4px 0 12px;text-align:right;flex-shrink:0;" id="char-count">0 / 500</div>
+    <div class="label" style="margin-bottom:8px;flex-shrink:0;">Exemplos rápidos</div>
+    <div class="chips" style="flex-shrink:0;">
+      <div class="chip" onclick="fillEx('Recebi uma proposta de emprego melhor mas teria que mudar de cidade. Não sei se vale deixar minha equipe.')">💼 Emprego</div>
+      <div class="chip" onclick="fillEx('Estou num relacionamento estável mas sem conexão. Me pergunto se devo continuar ou terminar.')">❤️ Relacionamento</div>
+      <div class="chip" onclick="fillEx('Tenho R$50k e estou entre investir no meu negócio ou deixar em renda fixa. Medo de perder tudo.')">💰 Investimento</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn btn-gold" style="margin-top:16px;flex-shrink:0;" onclick="enterChamber()">⚖️ Entrar na Câmara</button>
+  </div>
+
+  <!-- ═══ LOADING ═══ -->
+
+  <div class="screen screen-center" id="s-loading">
+    <div style="font-size:44px;margin-bottom:20px;" class="pulse">🔮</div>
+    <h2 style="margin-bottom:8px;">Analisando<br><em>seu dilema</em></h2>
+    <p>A IA está processando cada camada.</p>
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+    <div class="loading-step" id="loading-step">Identificando categoria...</div>
+  </div>
+
+  <!-- ═══ QUESTIONS ═══ -->
+
+  <div class="screen" id="s-questions">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-new')">←</div>
+      <div class="label">Câmara de Decisão</div>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="prog-row">
+      <div class="prog-seg"><div class="prog-fill" id="p1"></div></div>
+      <div class="prog-seg"><div class="prog-fill" id="p2"></div></div>
+      <div class="prog-seg"><div class="prog-fill" id="p3"></div></div>
+    </div>
+    <div style="text-align:center;margin-bottom:16px;flex-shrink:0;">
+      <div style="font-size:28px;margin-bottom:6px;">🔮</div>
+      <div id="q-tag"></div>
+    </div>
+    <!-- Q blocks -->
+    <div id="qb-0">
+      <div class="gold-label" style="margin-bottom:10px;">Pergunta 1 de 3</div>
+      <div class="card-gold" style="margin-bottom:14px;">
+        <div class="serif" style="font-size:17px;line-height:1.35;margin-bottom:5px;" id="qt-0">—</div>
+        <div style="font-size:11px;color:var(--muted2);" id="qh-0">—</div>
+      </div>
+      <div id="qo-0"></div>
+    </div>
+    <div id="qb-1" style="display:none;">
+      <div class="gold-label" style="margin-bottom:10px;">Pergunta 2 de 3</div>
+      <div class="card-gold" style="margin-bottom:14px;">
+        <div class="serif" style="font-size:17px;line-height:1.35;margin-bottom:5px;" id="qt-1">—</div>
+        <div style="font-size:11px;color:var(--muted2);" id="qh-1">—</div>
+      </div>
+      <div id="qo-1"></div>
+    </div>
+    <div id="qb-2" style="display:none;">
+      <div class="gold-label" style="margin-bottom:10px;">Pergunta 3 de 3</div>
+      <div class="card-gold" style="margin-bottom:14px;">
+        <div class="serif" style="font-size:17px;line-height:1.35;margin-bottom:5px;" id="qt-2">—</div>
+        <div style="font-size:11px;color:var(--muted2);" id="qh-2">—</div>
+      </div>
+      <div id="qo-2"></div>
+    </div>
+  </div>
+
+  <!-- ═══ PROCESSING ═══ -->
+
+  <div class="screen screen-center" id="s-processing">
+    <div style="font-size:44px;margin-bottom:20px;" class="pulse">⚖️</div>
+    <h2 style="margin-bottom:8px;">Calculando<br><em>impactos</em></h2>
+    <p>Gerando mapa e veredito.</p>
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+    <div class="loading-step" id="proc-step">Mapeando cenários...</div>
+  </div>
+
+  <!-- ═══ IMPACT ═══ -->
+
+  <div class="screen" id="s-impact">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-questions')">←</div>
+      <div class="label">Mapa de Impacto</div>
+      <div style="width:36px;"></div>
+    </div>
+    <h2 style="margin-bottom:4px;flex-shrink:0;">O que muda<br>em cada <em>cenário</em>?</h2>
+    <p style="margin-bottom:14px;flex-shrink:0;">Baseado nas suas respostas.</p>
+    <div class="scen-tabs">
+      <div class="scen-tab active" id="tab-a" onclick="switchScen('a')">Opção A</div>
+      <div class="scen-tab" id="tab-b" onclick="switchScen('b')">Opção B</div>
+    </div>
+    <div id="impact-a" style="flex:1;overflow-y:auto;"></div>
+    <div id="impact-b" style="flex:1;overflow-y:auto;display:none;"></div>
+    <button class="btn btn-gold" style="margin-top:14px;flex-shrink:0;" onclick="go('s-verdict')">Ver Veredito →</button>
+  </div>
+
+  <!-- ═══ VERDICT ═══ -->
+
+  <div class="screen" id="s-verdict">
+    <div class="nav">
+      <div class="back-btn" onclick="go('s-impact')">←</div>
+      <div class="label">Veredito</div>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="ring-wrap" style="flex-shrink:0;">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="45"/>
+        <circle class="ring-fill" id="ring" cx="50" cy="50" r="45"/>
+      </svg>
+      <div class="ring-text">
+        <div class="ring-pct" id="v-pct">—</div>
+        <div class="ring-sub">confiança</div>
+      </div>
+    </div>
+    <div class="card-gold" style="margin-bottom:10px;flex-shrink:0;text-align:center;">
+      <div class="gold-label" style="margin-bottom:6px;">✦ Recomendação</div>
+      <div class="serif" style="font-size:18px;line-height:1.35;" id="v-rec">—</div>
+    </div>
+    <div class="card-accent" style="margin-bottom:10px;flex-shrink:0;">
+      <div class="label" style="color:#a598f0;margin-bottom:6px;">Âncora psicológica</div>
+      <div style="font-size:12px;line-height:1.6;color:var(--muted2);font-style:italic;" id="v-anchor">—</div>
+    </div>
+    <div class="card" style="margin-bottom:10px;flex-shrink:0;">
+      <div class="label" style="margin-bottom:5px;">⚠ Viés identificado</div>
+      <div style="font-size:12px;color:var(--muted2);" id="v-bias">—</div>
+    </div>
+    <div class="card" style="margin-bottom:16px;flex-shrink:0;">
+      <div class="label" style="margin-bottom:5px;">→ Próxima ação</div>
+      <div style="font-size:13px;font-weight:500;" id="v-action">—</div>
+    </div>
+    <button class="btn btn-gold" style="margin-bottom:8px;flex-shrink:0;" onclick="saveAndHome()">✓ Decidi</button>
+    <button class="btn btn-outline" style="flex-shrink:0;" onclick="go('s-home')">Preciso de mais tempo</button>
+  </div>
+
+</div><!-- /phone -->
+</div><!-- /app -->
+
+<script>
+'use strict';
+
+// ── CONFIG ──────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://itujwjxfkgjhzuxjjoqp.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0dWp3anhma2dqaHp1eGpqb3FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMjczMTksImV4cCI6MjA5MTgwMzMxOX0.Y7UqKnAXb9BwIyAek4AUCApBWny1T5E-oh4VaCrXUBs';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── STATE ────────────────────────────────────────────────────────
+const state = {
+  user: null,
+  decision: '',
+  classification: null,
+  questions: [],
+  answers: [],
+  impactMap: null,
+  verdict: null,
+  currentQ: 0
+};
+
+// ── NAVIGATION ───────────────────────────────────────────────────
+function go(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const t = document.getElementById(id);
+  if (t) {
+    t.classList.add('active');
+    // Scroll content to top
+    const list = t.querySelector('[style*="overflow-y"]');
+    if (list) list.scrollTop = 0;
+  }
+  // Animate ring on verdict
+  if (id === 's-verdict' && state.verdict) {
+    setTimeout(animateRing, 150);
+  }
+}
+
+// ── AUTH ─────────────────────────────────────────────────────────
+// Check existing session on load
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) {
+    state.user = session.user;
+    updateHomeUser();
+    loadDecisions();
+    go('s-home');
+  }
+})();
+
+// Listen for auth changes
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN' && session?.user) {
+    state.user = session.user;
+    updateHomeUser();
+    loadDecisions();
+    go('s-home');
+  }
+  if (event === 'SIGNED_OUT') {
+    state.user = null;
+    go('s-splash');
+  }
+});
+
+async function doSignup() {
+  const email = document.getElementById('signup-email').value.trim();
+  const pass = document.getElementById('signup-pass').value;
+  const errEl = document.getElementById('err-signup');
+  const btn = document.getElementById('btn-signup');
+
+  hideError(errEl);
+
+  // Validation
+  if (!email || !email.includes('@')) {
+    return showError(errEl, 'Digite um email válido.');
+  }
+  if (pass.length < 6) {
+    return showError(errEl, 'Senha precisa ter mínimo 6 caracteres.');
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Criando conta...';
+
+  try {
+    const { data, error } = await sb.auth.signUp({ email, password: pass });
+
+    if (error) {
+      if (error.message.includes('rate limit')) {
+        return showError(errEl, 'Muitas tentativas. Aguarde 1 minuto e tente novamente.');
+      }
+      if (error.message.includes('already registered')) {
+        return showError(errEl, 'Este email já está cadastrado. Faça login.');
+      }
+      return showError(errEl, error.message);
+    }
+
+    // Success — onAuthStateChange handles redirect
+    if (!data?.session) {
+      showError(errEl, 'Conta criada! Verifique seu email para confirmar.');
+    }
+
+  } catch (e) {
+    showError(errEl, 'Erro de conexão. Verifique sua internet.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Criar conta grátis';
+  }
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('err-login');
+  const btn = document.getElementById('btn-login');
+
+  hideError(errEl);
+
+  if (!email || !pass) {
+    return showError(errEl, 'Preencha email e senha.');
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+
+    if (error) {
+      if (error.message.includes('Invalid login')) {
+        return showError(errEl, 'Email ou senha incorretos.');
+      }
+      if (error.message.includes('Email not confirmed')) {
+        return showError(errEl, 'Confirme seu email antes de entrar.');
+      }
+      return showError(errEl, error.message);
+    }
+    // Success — onAuthStateChange handles redirect
+
+  } catch (e) {
+    showError(errEl, 'Erro de conexão. Verifique sua internet.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  }
+}
+
+// ── UI HELPERS ───────────────────────────────────────────────────
+function showError(el, msg) {
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideError(el) {
+  el.style.display = 'none';
+  el.textContent = '';
+}
+
+function updateHomeUser() {
+  const email = state.user?.email || '';
+  document.getElementById('home-name').textContent = email.split('@')[0] || 'Usuário';
+  document.getElementById('home-avatar').textContent = (email[0] || '?').toUpperCase();
+}
+
+function fillEx(txt) {
+  document.getElementById('txt-decision').value = txt;
+  updateCharCount();
+}
+
+function updateCharCount() {
+  const len = document.getElementById('txt-decision').value.length;
+  document.getElementById('char-count').textContent = `${len} / 500`;
+}
+document.getElementById('txt-decision').addEventListener('input', updateCharCount);
+
+// ── DATA ─────────────────────────────────────────────────────────
+async function loadDecisions() {
+  if (!state.user?.id) return;
+  try {
+    const { data } = await sb.from('decisions')
+      .select('id,texto,categoria,criado_em')
+      .eq('user_id', state.user.id)
+      .order('criado_em', { ascending: false })
+      .limit(5);
+
+    const list = document.getElementById('decisions-list');
+    if (!data || data.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--muted);font-size:13px;">Nenhuma decisão ainda.</div>';
+      return;
+    }
+    const catEmoji = { carreira:'💼', finanças:'💰', relacionamentos:'❤️', estilo_de_vida:'🌱', saúde:'🏥', família:'🏠' };
+    list.innerHTML = data.map(d => `
+      <div class="dec-item">
+        <div style="font-size:20px;">${catEmoji[d.categoria] || '📋'}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="dec-item-text">${(d.texto || '').substring(0,55)}${d.texto?.length > 55 ? '...' : ''}</div>
+          <div style="font-size:10px;color:var(--muted);">${new Date(d.criado_em).toLocaleDateString('pt-BR')}</div>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    console.error('loadDecisions:', e);
+  }
+}
+
+async function saveDecision() {
+  if (!state.user?.id || !state.verdict) return;
+  try {
+    await sb.from('decisions').insert({
+      user_id: state.user.id,
+      texto: state.decision,
+      categoria: state.classification?.categoria || 'outro',
+      opcao_a: state.classification?.opcao_a || '',
+      opcao_b: state.classification?.opcao_b || '',
+      respostas: state.answers,
+      impacto: state.impactMap,
+      veredito: state.verdict
+    });
+    await loadDecisions();
+  } catch(e) {
+    console.error('saveDecision:', e);
+  }
+}
+
+// ── AI CALL ──────────────────────────────────────────────────────
+async function callAI(system, user) {
+  const res = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ system, user })
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.result;
+}
+
+function setStep(id, txt) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.opacity = '0';
+  setTimeout(() => { el.textContent = txt; el.style.opacity = '1'; }, 200);
+}
+
+// ── CHAMBER FLOW ─────────────────────────────────────────────────
+async function enterChamber() {
+  const txt = document.getElementById('txt-decision').value.trim();
+  const errEl = document.getElementById('err-new');
+
+  if (txt.length < 15) {
+    return showError(errEl, 'Escreva um pouco mais sobre seu dilema.');
+  }
+  hideError(errEl);
+
+  state.decision = txt;
+  state.answers = [];
+  state.currentQ = 0;
+
+  go('s-loading');
+
+  try {
+    setStep('loading-step', 'Identificando categoria e vieses...');
+
+    const classification = await callAI(
+      `Psicólogo cognitivo especialista em decisões. Analise o dilema e retorne APENAS JSON válido (sem markdown):
+{"categoria":"carreira"|"finanças"|"relacionamentos"|"estilo_de_vida"|"saúde"|"família","subcategoria":string,"dilema_resumido":string,"opcao_a":string,"opcao_b":string,"vieses_provaveis":[string]}`,
+      `Dilema: "${txt}"`
+    );
+    state.classification = classification;
+
+    setStep('loading-step', 'Gerando perguntas cirúrgicas...');
+
+    const qData = await callAI(
+      `Psicoterapeuta especialista em decisões. Gere 3 perguntas curtas e diretas. Retorne APENAS JSON válido (sem markdown):
+{"perguntas":[{"id":1,"texto":string,"dica":string,"opcoes":[string,string,string]},{"id":2,"texto":string,"dica":string,"opcoes":[string,string,string]},{"id":3,"texto":string,"dica":string,"opcoes":[string,string,string]}]}
+Regras: P1=instinto, P2=projeção de arrependimento, P3=bloqueio real. Máx 15 palavras por pergunta.`,
+      `Dilema: "${txt}"\nCategoria: ${classification.categoria}\nA: ${classification.opcao_a}\nB: ${classification.opcao_b}`
+    );
+    state.questions = qData.perguntas;
+
+    renderQuestions();
+    go('s-questions');
+
+  } catch(e) {
+    console.error('enterChamber:', e);
+    go('s-new');
+    showError(document.getElementById('err-new'), 'Erro ao conectar com a IA. Verifique sua internet e tente novamente.');
+  }
+}
+
+// ── QUESTIONS ────────────────────────────────────────────────────
+function renderQuestions() {
+  const c = state.classification;
+  const catEmoji = { carreira:'💼', finanças:'💰', relacionamentos:'❤️', estilo_de_vida:'🌱', saúde:'🏥', família:'🏠' };
+  document.getElementById('q-tag').innerHTML = `<span class="tag tag-purple">${catEmoji[c.categoria]||'📋'} ${c.categoria}</span>`;
+
+  ['p1','p2','p3'].forEach(id => document.getElementById(id).style.width = '0%');
+
+  state.questions.forEach((q, i) => {
+    document.getElementById(`qt-${i}`).textContent = q.texto;
+    document.getElementById(`qh-${i}`).textContent = q.dica;
+    const container = document.getElementById(`qo-${i}`);
+    container.innerHTML = '';
+    q.opcoes.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'opt-btn';
+      btn.textContent = opt;
+      btn.onclick = () => handleAnswer(i, opt, btn);
+      container.appendChild(btn);
+    });
+  });
+
+  showQBlock(0);
+}
+
+function showQBlock(idx) {
+  for (let i = 0; i < 3; i++) {
+    document.getElementById(`qb-${i}`).style.display = i === idx ? 'block' : 'none';
+  }
+  state.currentQ = idx;
+  for (let i = 0; i < 3; i++) {
+    document.getElementById(`p${i+1}`).style.width = i < idx ? '100%' : (i === idx ? '50%' : '0%');
+  }
+}
+
+function handleAnswer(qIdx, answer, btn) {
+  // Visual feedback
+  btn.parentElement.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  state.answers[qIdx] = answer;
+
+  setTimeout(() => {
+    if (qIdx < 2) {
+      document.getElementById(`p${qIdx+1}`).style.width = '100%';
+      showQBlock(qIdx + 1);
+    } else {
+      document.getElementById('p3').style.width = '100%';
+      generateImpactAndVerdict();
+    }
+    btn.classList.remove('selected');
+  }, 350);
+}
+
+// ── IMPACT + VERDICT ─────────────────────────────────────────────
+async function generateImpactAndVerdict() {
+  go('s-processing');
+
+  const { decision, classification, answers } = state;
+  const answersText = answers.map((a, i) => `P${i+1}: "${a}"`).join('\n');
+
+  try {
+    setStep('proc-step', 'Mapeando cenários...');
+
+    const impactMap = await callAI(
+      `Analista de decisões de vida. Projete impactos reais. Retorne APENAS JSON válido (sem markdown):
+{"opcao_a":{"nome":string,"impactos":[{"dimensao":string,"emoji":string,"score":number,"rotulo":string}]},"opcao_b":{"nome":string,"impactos":[...]}}
+Score: -100 a +100. Dimensões: financeiro, emocional, relacional, crescimento.`,
+      `Dilema: "${decision}"\nA: ${classification.opcao_a}\nB: ${classification.opcao_b}\nRespostas:\n${answersText}`
+    );
+    state.impactMap = impactMap;
+
+    setStep('proc-step', 'Gerando veredito...');
+
+    const verdict = await callAI(
+      `Mentor sábio e direto. Nunca seja vago. Tome posição clara. Retorne APENAS JSON válido (sem markdown):
+{"recomendacao":string,"confianca_pct":number,"ancora_psicologica":string,"alerta_vies":string,"proxima_acao":string}`,
+      `Dilema: "${decision}"\nA: ${classification.opcao_a}\nB: ${classification.opcao_b}\nRespostas:\n${answersText}\nImpactos A: ${JSON.stringify(impactMap.opcao_a?.impactos)}\nImpactos B: ${JSON.stringify(impactMap.opcao_b?.impactos)}\nVieses: ${classification.vieses_provaveis?.join(', ')}`
+    );
+    state.verdict = verdict;
+
+    renderImpact();
+    renderVerdict();
+    go('s-impact');
+
+  } catch(e) {
+    console.error('generateImpactAndVerdict:', e);
+    go('s-questions');
+    alert('Erro ao gerar análise. Tente novamente.');
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────────────
+function renderImpact() {
+  const { impactMap, classification } = state;
+  const aName = (classification.opcao_a || 'Opção A').substring(0, 18);
+  const bName = (classification.opcao_b || 'Opção B').substring(0, 18);
+  document.getElementById('tab-a').textContent = aName;
+  document.getElementById('tab-b').textContent = bName;
+  renderImpactRows('impact-a', impactMap.opcao_a?.impactos || []);
+  renderImpactRows('impact-b', impactMap.opcao_b?.impactos || []);
+}
+
+function renderImpactRows(elId, impactos) {
+  const el = document.getElementById(elId);
+  el.innerHTML = impactos.map(imp => {
+    const s = imp.score || 0;
+    const color = s > 20 ? 'var(--green)' : s < -20 ? 'var(--red)' : 'var(--gold)';
+    return `
+    <div class="impact-row">
+      <div class="impact-emoji">${imp.emoji || '●'}</div>
+      <div class="impact-info">
+        <div class="impact-dim">${imp.dimensao}</div>
+        <div class="impact-val" style="color:${color}">${imp.rotulo}</div>
+      </div>
+      <div class="impact-bar-wrap">
+        <div class="impact-bar" style="width:${Math.abs(s)}%;background:${color};"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function switchScen(s) {
+  document.getElementById('tab-a').className = 'scen-tab' + (s === 'a' ? ' active' : '');
+  document.getElementById('tab-b').className = 'scen-tab' + (s === 'b' ? ' active' : '');
+  document.getElementById('impact-a').style.display = s === 'a' ? 'block' : 'none';
+  document.getElementById('impact-b').style.display = s === 'b' ? 'block' : 'none';
+}
+
+function renderVerdict() {
+  const v = state.verdict;
+  document.getElementById('v-pct').textContent = (v.confianca_pct || 0) + '%';
+  document.getElementById('v-rec').textContent = v.recomendacao || '—';
+  document.getElementById('v-anchor').textContent = v.ancora_psicologica || '—';
+  document.getElementById('v-bias').textContent = v.alerta_vies || '—';
+  document.getElementById('v-action').textContent = v.proxima_acao || '—';
+}
+
+function animateRing() {
+  const pct = state.verdict?.confianca_pct || 0;
+  const circumference = 2 * Math.PI * 45;
+  const offset = circumference - (pct / 100) * circumference;
+  document.getElementById('ring').style.strokeDashoffset = offset;
+}
+
+async function saveAndHome() {
+  await saveDecision();
+  go('s-home');
+}
+</script>
+
+</body>
+</html>
